@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import init
 
 
@@ -22,10 +23,10 @@ class ImageEncoder(nn.Module):
             nn.Linear(input_size, hidden_size),
             nn.BatchNorm1d(hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, embed_size)
+            nn.Linear(hidden_size, embed_size),
         )
 
         self.encoder.apply(init_weights)
 
     def forward(self, x):
-        return self.encoder(x)
+        return F.normalize(self.encoder(x))

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class GRUEncoder(nn.Module):
@@ -15,6 +16,5 @@ class GRUEncoder(nn.Module):
     def forward(self, embedded, input_lengths, hidden=None):
         packed = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths)
         outputs, hidden = self.gru(packed, hidden)
-        outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs)
-        outputs = outputs[:, :, :self.hidden_size] + outputs[:, :, self.hidden_size:]
-        return outputs, hidden
+        hidden = torch.mean(hidden, dim=0)
+        return F.normalize(hidden)

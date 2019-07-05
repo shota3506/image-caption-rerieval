@@ -2,6 +2,8 @@ import argparse
 import os
 import time
 import spacy
+import configparser
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
@@ -13,6 +15,7 @@ import datasets
 import models
 
 
+config = configparser.ConfigParser()
 spacy_en = spacy.load('en')
 
 
@@ -23,30 +26,53 @@ def tokenize(text):
 def main(args):
     gpu = args.gpu
     model_name = args.model
+    config_path = args.config
     word2vec_path = args.word2vec
     img2vec_path = args.img2vec
     train_json_path = args.train_json
-    trial_name = args.name
+    name = args.name
+    save_path = args.save
 
     print("[args] gpu=%d" % gpu)
     print("[args] model_name=%s" % model_name)
+    print("[args] config_path=%s" % config_path)
     print("[args] word2vec_path=%s" % word2vec_path)
     print("[args] img2vec_path=%s" % img2vec_path)
     print("[args] train_json_path=%s" % train_json_path)
-    print("[args] trial_name=%s" % trial_name)
+    print("[args] name=%s" % name)
+    print("[args] save_path=%s" % save_path)
+
+    device = torch.device("cuda:" + str(gpu) if torch.cuda.is_available() else "cpu")
+
+    config.read(config_path)
 
     # Hyper parameters
-    word_size = 300
-    img_size = 2048
-    img_hidden_size = 2048
-    embed_size = 1024
-    n_layers = 2
-    margin = 0.1
-    weight_decay = 0.00001
-    grad_clip = 5.0
-    lr = 0.001
-    # batch_size = 256
-    batch_size = 2
+    hyperparams = config["hyperparams"]
+    word_size = int(hyperparams["word_size"])
+    img_size = int(hyperparams["img_size"])
+    img_hidden_size = int(hyperparams["img_hidden_size"])
+    embed_size = int(hyperparams["embed_size"])
+    n_layers = int(hyperparams["n_layers"])
+    margin = float(hyperparams["margin"])
+    weight_decay = float(hyperparams["weight_decay"])
+    grad_clip = float(hyperparams["grad_clip"])
+    lr = float(hyperparams["lr"])
+    batch_size = int(hyperparams["batch_size"])
+    n_epochs = int(hyperparams["n_epochs"])
+    n_negatives = int(hyperparams["n_negatives"])
+
+    print("[hyperparames] word_size=%d" % word_size)
+    print("[hyperparames] img_size=%d" % img_size)
+    print("[hyperparames] img_hidden_size=%d" % img_hidden_size)
+    print("[hyperparames] embed_size=%d" % embed_size)
+    print("[hyperparames] n_layers=%d" % n_layers)
+    print("[hyperparames] margin=%f" % margin)
+    print("[hyperparames] weight_decay=%f" % weight_decay)
+    print("[hyperparames] grad_clip=%f" % grad_clip)
+    print("[hyperparames] lr=%f" % lr)
+    print("[hyperparames] batch_size=%d" % batch_size)
+    print("[hyperparames] n_epochs=%d" % n_epochs)
+    print("[hyperparames] n_negatives=%d" % n_negatives)
 
     # Data preparation
     word2vec = torchtext.vocab.Vectors(word2vec_path)
@@ -59,45 +85,70 @@ def main(args):
     dataloader_train = datasets.coco.get_loader(img2vec_path, train_json_path, word2vec, transform, batch_size, True, 1)
 
     # Model preparation
-    img_encoder = models.ImageEncoder(img_size, img_hidden_size, embed_size)
-    seq_encoder = models.GRUEncoder(word_size, embed_size, n_layers)
+    img_encoder = models.ImageEncoder(img_size, img_hidden_size, embed_size).to(device)
+    sen_encoder = models.GRUEncoder(word_size, embed_size, n_layers).to(device)
 
     img_optimizer = optim.Adam(img_encoder.parameters(), lr=lr, weight_decay=weight_decay)
-    sen_optimizer = optim.Adam(seq_encoder.parameters(), lr=lr, weight_decay=weight_decay)
+    sen_optimizer = optim.Adam(sen_encoder.parameters(), lr=lr, weight_decay=weight_decay)
 
-    criterion = nn.MSELoss()
+    criterion = nn.TripletMarginLoss(margin=margin)
 
-    for epoch in range(1):
-        for imgs, seqs, lengths in dataloader_train:
+    for epoch in range(n_epochs):
+        pbar = tqdm(dataloader_train)
+        running_loss = 0.0
+
+        # Train
+        for i, (imgs, sens, lengths) in enumerate(pbar):
+            pbar.set_description('epoch %3d / %d' % (epoch + 1, n_epochs))
+
+            imgs = imgs.to(device)
             img_embedded = img_encoder(imgs)
 
-            seqs = torch.transpose(seqs, 0, 1)
-            seq_output, seq_hidden = seq_encoder(seqs, lengths)
-            seq_embedded = torch.mean(seq_hidden, dim=0)
+            sens = torch.transpose(sens, 0, 1)
+            sens = sens.to(device)
+            sen_embedded = sen_encoder(sens, lengths)
 
             img_optimizer.zero_grad()
             sen_optimizer.zero_grad()
 
-            loss = criterion(img_embedded, seq_embedded)
+            loss = 0.0
+            for _ in range(n_negatives):
+                perm = torch.randperm(len(img_embedded))
+                img_shuffled = img_embedded[perm]
+                loss += criterion(sen_embedded, img_embedded, img_shuffled)
+            loss /= n_negatives
             loss.backward()
 
             nn.utils.clip_grad_value_(img_encoder.parameters(), grad_clip)
-            nn.utils.clip_grad_value_(seq_encoder.parameters(), grad_clip)
-
+            nn.utils.clip_grad_value_(sen_encoder.parameters(), grad_clip)
             img_optimizer.step()
             sen_optimizer.step()
 
-            print(loss)
+            running_loss += loss.item()
+            if (i + 1) % 100 == 0:
+                pbar.set_postfix(loss=running_loss / 100)
+                running_loss = 0
+
+        if (epoch + 1) % 1 == 0:
+            save_dir = os.path.join(save_path, name)
+            if not os.path.isdir(save_dir):
+                os.mkdir(save_dir)
+            torch.save(sen_encoder.state_dict(), os.path.join(
+                save_dir, 'sentence_encoder-{}.pth'.format(epoch + 1)))
+            torch.save(img_encoder.state_dict(), os.path.join(
+                save_dir, 'image_encoder-{}.pth'.format(epoch + 1)))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--model", type=str, required=True)
+    parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--word2vec", type=str, default=None)
     parser.add_argument("--img2vec", type=str, default=None)
     parser.add_argument("--train_json", type=str, default=None)
     parser.add_argument("--name", type=str, required=True)
+    parser.add_argument("--save", type=str, required=True)
 
     args = parser.parse_args()
     main(args)

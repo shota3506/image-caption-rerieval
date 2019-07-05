@@ -9,7 +9,7 @@ from pycocotools.coco import COCO
 class CocoDataset(data.Dataset):
     """COCO Custom Dataset compatible with torch.utils.data.DataLoader."""
 
-    def __init__(self, root, json, vocab, transform=None):
+    def __init__(self, root, json, vocab, n_negatives=0, transform=None):
         """Set the path for images, captions and vocabulary wrapper.
 
         Args:
@@ -22,6 +22,7 @@ class CocoDataset(data.Dataset):
         self.coco = COCO(json)
         self.ids = list(self.coco.anns.keys())
         self.vocab = vocab
+        self.n_negatives = n_negatives
         self.transform = transform
 
     def __getitem__(self, index):
@@ -31,7 +32,6 @@ class CocoDataset(data.Dataset):
         ann_id = self.ids[index]
         caption = coco.anns[ann_id]['caption']
         img_id = coco.anns[ann_id]['image_id']
-
         image = self.img2vec[img_id]
 
         # Convert caption (string) to word ids.

@@ -4,3 +4,4 @@ __pycache__/
 .vector_cache/
 .data/
 features/
+save/
