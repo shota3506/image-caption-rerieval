@@ -23,9 +23,21 @@ def tokenize(text):
     return [tok.text for tok in spacy_en.tokenizer(text)]
 
 
+class PairwiseRankingLoss(nn.Module):
+    def __init__(self, margin):
+        super(PairwiseRankingLoss, self).__init__()
+        self.margin = margin
+
+    def forward(self, anchor, positive, negative):
+        p_product = torch.sum(anchor * positive, dim=1)
+        n_product = torch.sum(anchor * negative, dim=1)
+        dist_hinge = torch.clamp(self.margin - p_product + n_product, min=0.0)
+        loss = torch.mean(dist_hinge)
+        return loss
+
+
 def main(args):
     gpu = args.gpu
-    model_name = args.model
     config_path = args.config
     word2vec_path = args.word2vec
     img2vec_path = args.img2vec
@@ -34,7 +46,6 @@ def main(args):
     save_path = args.save
 
     print("[args] gpu=%d" % gpu)
-    print("[args] model_name=%s" % model_name)
     print("[args] config_path=%s" % config_path)
     print("[args] word2vec_path=%s" % word2vec_path)
     print("[args] img2vec_path=%s" % img2vec_path)
@@ -46,26 +57,32 @@ def main(args):
 
     config.read(config_path)
 
+    # Model parameters
+    modelparams = config["modelparams"]
+    sentence_encoder_name = modelparams.get("sentence_encoder")
+    n_layers = modelparams.getint("n_layers")
+    word_size = modelparams.getint("word_size")
+    img_size = modelparams.getint("img_size")
+    img_hidden_size = modelparams.getint("img_hidden_size")
+    embed_size = modelparams.getint("embed_size")
+
+    print("[modelparames] sentence_encoder_name=%s" % sentence_encoder_name)
+    print("[modelparames] n_layers=%d" % n_layers)
+    print("[modelparames] word_size=%d" % word_size)
+    print("[modelparames] img_size=%d" % img_size)
+    print("[modelparames] img_hidden_size=%d" % img_hidden_size)
+    print("[modelparames] embed_size=%d" % embed_size)
+
     # Hyper parameters
     hyperparams = config["hyperparams"]
-    word_size = int(hyperparams["word_size"])
-    img_size = int(hyperparams["img_size"])
-    img_hidden_size = int(hyperparams["img_hidden_size"])
-    embed_size = int(hyperparams["embed_size"])
-    n_layers = int(hyperparams["n_layers"])
-    margin = float(hyperparams["margin"])
-    weight_decay = float(hyperparams["weight_decay"])
-    grad_clip = float(hyperparams["grad_clip"])
-    lr = float(hyperparams["lr"])
-    batch_size = int(hyperparams["batch_size"])
-    n_epochs = int(hyperparams["n_epochs"])
-    n_negatives = int(hyperparams["n_negatives"])
+    margin = hyperparams.getfloat("margin")
+    weight_decay = hyperparams.getfloat("weight_decay")
+    grad_clip = hyperparams.getfloat("grad_clip")
+    lr = hyperparams.getfloat("lr")
+    batch_size = hyperparams.getint("batch_size")
+    n_epochs = hyperparams.getint("n_epochs")
+    n_negatives = hyperparams.getint("n_negatives")
 
-    print("[hyperparames] word_size=%d" % word_size)
-    print("[hyperparames] img_size=%d" % img_size)
-    print("[hyperparames] img_hidden_size=%d" % img_hidden_size)
-    print("[hyperparames] embed_size=%d" % embed_size)
-    print("[hyperparames] n_layers=%d" % n_layers)
     print("[hyperparames] margin=%f" % margin)
     print("[hyperparames] weight_decay=%f" % weight_decay)
     print("[hyperparames] grad_clip=%f" % grad_clip)
@@ -86,12 +103,15 @@ def main(args):
 
     # Model preparation
     img_encoder = models.ImageEncoder(img_size, img_hidden_size, embed_size).to(device)
-    sen_encoder = models.GRUEncoder(word_size, embed_size, n_layers).to(device)
+    if sentence_encoder_name == 'GRU':
+        sen_encoder = models.GRUEncoder(word_size, embed_size, n_layers).to(device)
+    else:
+        raise ValueError
 
     img_optimizer = optim.Adam(img_encoder.parameters(), lr=lr, weight_decay=weight_decay)
     sen_optimizer = optim.Adam(sen_encoder.parameters(), lr=lr, weight_decay=weight_decay)
 
-    criterion = nn.TripletMarginLoss(margin=margin)
+    criterion = PairwiseRankingLoss(margin=margin)
 
     for epoch in range(n_epochs):
         pbar = tqdm(dataloader_train)
@@ -142,7 +162,6 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gpu", type=int, default=0)
-    parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--config", type=str, required=True)
     parser.add_argument("--word2vec", type=str, default=None)
     parser.add_argument("--img2vec", type=str, default=None)
