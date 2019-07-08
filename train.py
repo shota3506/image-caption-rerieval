@@ -93,13 +93,7 @@ def main(args):
 
     # Data preparation
     word2vec = torchtext.vocab.Vectors(word2vec_path)
-    transform = torchvision.transforms.Compose([
-        torchvision.transforms.Resize(256),
-        torchvision.transforms.CenterCrop(224),
-        torchvision.transforms.ToTensor(),
-        torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    dataloader_train = datasets.coco.get_loader(img2vec_path, train_json_path, word2vec, transform, batch_size, True, 1)
+    dataloader_train = datasets.coco.get_loader(img2vec_path, train_json_path, word2vec, batch_size)
 
     # Model preparation
     img_encoder = models.ImageEncoder(img_size, img_hidden_size, embed_size).to(device)
@@ -118,7 +112,7 @@ def main(args):
         running_loss = 0.0
 
         # Train
-        for i, (imgs, sens, lengths) in enumerate(pbar):
+        for i, (imgs, sens, lengths, _, _) in enumerate(pbar):
             pbar.set_description('epoch %3d / %d' % (epoch + 1, n_epochs))
 
             imgs = imgs.to(device)

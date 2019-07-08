@@ -38,11 +38,9 @@ class CocoDataset(data.Dataset):
         tokens = nltk.tokenize.word_tokenize(str(caption).lower())
         caption = []
 
-        # caption.append(vocab['<start>'])
         caption.extend([vocab[token] for token in tokens])
-        # caption.append([vocab('<end>'])
         target = torch.stack(caption)
-        return image, target
+        return image, target, img_id, ann_id
 
     def __len__(self):
         return len(self.ids)
@@ -66,7 +64,10 @@ def collate_fn(data):
     """
     # Sort a data list by caption length (descending order).
     data.sort(key=lambda x: len(x[1]), reverse=True)
-    images, captions = zip(*data)
+    images, captions, img_ids, ids = zip(*data)
+
+    img_ids = torch.tensor(img_ids, dtype=torch.int)
+    ids = torch.tensor(ids, dtype=torch.int)
 
     # Merge images (from tuple of 3D tensor to 4D tensor).
     images = torch.stack(images, 0)
@@ -77,10 +78,10 @@ def collate_fn(data):
     for i, cap in enumerate(captions):
         end = lengths[i]
         targets[i, :end] = cap[:end]
-    return images, targets, lengths
+    return images, targets, lengths, img_ids, ids
 
 
-def get_loader(root, json, vocab, transform, batch_size, shuffle, num_workers):
+def get_loader(root, json, vocab, batch_size, shuffle=True, num_workers=1, transform=None, drop_last=True):
     """Returns torch.utils.data.DataLoader for custom coco dataset."""
     # COCO caption dataset
     coco = CocoDataset(root=root,
@@ -97,6 +98,6 @@ def get_loader(root, json, vocab, transform, batch_size, shuffle, num_workers):
                                               batch_size=batch_size,
                                               shuffle=shuffle,
                                               num_workers=num_workers,
-                                              drop_last=True,
+                                              drop_last=drop_last,
                                               collate_fn=collate_fn)
     return data_loader

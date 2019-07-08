@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class GRUEncoder(nn.Module):
-    def __init__(self, input_size, hidden_size, n_layers, dropout=0):
+    def __init__(self, input_size, hidden_size, n_layers, dropout=0.1):
         super(GRUEncoder, self).__init__()
         self.n_layers = n_layers
         self.input_size = input_size
