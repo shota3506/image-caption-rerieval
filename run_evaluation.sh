@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-GPU=1
+GPU=0
 CONFIG=./config/trial1.ini
 WORD2VEC=$HOME/dataset/glove/glove.840B.300d.txt
 IMG2VEC=./features/val2017.resnet50.2048d.pth
