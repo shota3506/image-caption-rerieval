@@ -12,9 +12,12 @@ class GRUEncoder(nn.Module):
 
         self.gru = nn.GRU(input_size, hidden_size, n_layers,
                           dropout=(0 if n_layers == 1 else dropout), bidirectional=True)
+        self.linear = nn.Linear(2 * n_layers * hidden_size, hidden_size)
 
     def forward(self, embedded, input_lengths, hidden=None):
         packed = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths)
         outputs, hidden = self.gru(packed, hidden)
-        hidden = torch.mean(hidden, dim=0)
+        batch_size = hidden.shape[1]
+        hidden = torch.transpose(hidden, 0, 1).contiguous().view(batch_size, -1)
+        hidden = self.linear(hidden)
         return F.normalize(hidden)

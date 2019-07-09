@@ -157,6 +157,8 @@ def main(args):
     img_encoder = models.ImageEncoder(img_size, img_hidden_size, embed_size).to(device)
     if sentence_encoder_name == 'GRU':
         sen_encoder = models.GRUEncoder(word_size, embed_size, n_layers).to(device)
+    elif sentence_encoder_name == 'LSTM':
+        sen_encoder = models.LSTMEncoder(word_size, embed_size, n_layers).to(device)
     else:
         raise ValueError
     # Load params
