@@ -38,8 +38,8 @@ class CocoDataset(data.Dataset):
         tokens = nltk.tokenize.word_tokenize(str(caption).lower())
         caption = []
 
-        caption.extend([vocab[token] for token in tokens])
-        target = torch.stack(caption)
+        caption.extend([vocab(token) for token in tokens])
+        target = torch.tensor(caption)
         return image, target, img_id, ann_id
 
     def __len__(self):
@@ -74,7 +74,7 @@ def collate_fn(data):
 
     # Merge captions (from tuple of 1D tensor to 2D tensor).
     lengths = [len(cap) for cap in captions]
-    targets = torch.zeros(len(captions), max(lengths), len(captions[0][0]))
+    targets = torch.zeros(len(captions), max(lengths)).long()
     for i, cap in enumerate(captions):
         end = lengths[i]
         targets[i, :end] = cap[:end]

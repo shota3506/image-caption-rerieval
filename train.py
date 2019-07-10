@@ -3,6 +3,7 @@ import os
 import time
 import spacy
 import configparser
+import pickle
 from tqdm import tqdm
 
 import torch
@@ -13,14 +14,10 @@ import torchtext
 
 import datasets
 import models
+from build_vocab import Vocab
 
 
 config = configparser.ConfigParser()
-spacy_en = spacy.load('en')
-
-
-def tokenize(text):
-    return [tok.text for tok in spacy_en.tokenizer(text)]
 
 
 class PairwiseRankingLoss(nn.Module):
@@ -39,7 +36,7 @@ class PairwiseRankingLoss(nn.Module):
 def main(args):
     gpu = args.gpu
     config_path = args.config
-    word2vec_path = args.word2vec
+    vocab_path = args.vocab
     img2vec_path = args.img2vec
     train_json_path = args.train_json
     name = args.name
@@ -47,7 +44,7 @@ def main(args):
 
     print("[args] gpu=%d" % gpu)
     print("[args] config_path=%s" % config_path)
-    print("[args] word2vec_path=%s" % word2vec_path)
+    print("[args] word2vec_path=%s" % vocab_path)
     print("[args] img2vec_path=%s" % img2vec_path)
     print("[args] train_json_path=%s" % train_json_path)
     print("[args] name=%s" % name)
@@ -92,15 +89,17 @@ def main(args):
     print("[hyperparames] n_negatives=%d" % n_negatives)
 
     # Data preparation
-    word2vec = torchtext.vocab.Vectors(word2vec_path)
-    dataloader_train = datasets.coco.get_loader(img2vec_path, train_json_path, word2vec, batch_size)
+    print("[info] Loading vocabulary ...")
+    with open(vocab_path, 'rb') as f:
+        vocab = pickle.load(f)
+    dataloader_train = datasets.coco.get_loader(img2vec_path, train_json_path, vocab, batch_size)
 
     # Model preparation
     img_encoder = models.ImageEncoder(img_size, img_hidden_size, embed_size).to(device)
     if sentence_encoder_name == 'GRU':
-        sen_encoder = models.GRUEncoder(word_size, embed_size, n_layers).to(device)
+        sen_encoder = models.GRUEncoder(vocab, word_size, embed_size, n_layers).to(device)
     elif sentence_encoder_name == 'LSTM':
-        sen_encoder = models.LSTMEncoder(word_size, embed_size, n_layers).to(device)
+        sen_encoder = models.LSTMEncoder(vocab, word_size, embed_size, n_layers).to(device)
     else:
         raise ValueError
 
@@ -120,7 +119,6 @@ def main(args):
             imgs = imgs.to(device)
             img_embedded = img_encoder(imgs)
 
-            sens = torch.transpose(sens, 0, 1)
             sens = sens.to(device)
             sen_embedded = sen_encoder(sens, lengths)
 
@@ -159,7 +157,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--config", type=str, required=True)
-    parser.add_argument("--word2vec", type=str, default=None)
+    parser.add_argument("--vocab", type=str, default=None)
     parser.add_argument("--img2vec", type=str, default=None)
     parser.add_argument("--train_json", type=str, default=None)
     parser.add_argument("--name", type=str, required=True)

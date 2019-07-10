@@ -2,6 +2,7 @@ import numpy as np
 import argparse
 import spacy
 import configparser
+import pickle
 
 import torch
 import torchvision
@@ -9,6 +10,7 @@ import torchtext
 
 import datasets
 import models
+from build_vocab import Vocab
 
 
 config = configparser.ConfigParser()
@@ -62,7 +64,7 @@ def encode_candidate(sen_encoder, img_encoder, dataloader, device):
 def main(args):
     gpu = args.gpu
     config_path = args.config
-    word2vec_path = args.word2vec
+    vocab_path = args.vocab
     img2vec_path = args.img2vec
     val_json_path = args.val_json
     sentence_encoder_path = args.sentence_encoder
@@ -72,7 +74,7 @@ def main(args):
 
     print("[args] gpu=%d" % gpu)
     print("[args] config_path=%s" % config_path)
-    print("[args] word2vec_path=%s" % word2vec_path)
+    print("[args] word2vec_path=%s" % vocab_path)
     print("[args] img2vec_path=%s" % img2vec_path)
     print("[args] val_json_path=%s" %val_json_path)
     print("[args] sentence_encoder_path=%s" % sentence_encoder_path)
@@ -108,15 +110,17 @@ def main(args):
     print("[hyperparames] batch_size=%d" % batch_size)
 
     # Data preparation
-    word2vec = torchtext.vocab.Vectors(word2vec_path)
-    dataloader_val = datasets.coco.get_loader(img2vec_path, val_json_path, word2vec, batch_size, shuffle=False, drop_last=False)
+    print("[info] Loading vocabulary ...")
+    with open(vocab_path, 'rb') as f:
+        vocab = pickle.load(f)
+    dataloader_val = datasets.coco.get_loader(img2vec_path, val_json_path, vocab, batch_size)
 
     # Model preparation
     img_encoder = models.ImageEncoder(img_size, img_hidden_size, embed_size).to(device)
     if sentence_encoder_name == 'GRU':
-        sen_encoder = models.GRUEncoder(word_size, embed_size, n_layers).to(device)
+        sen_encoder = models.GRUEncoder(vocab, word_size, embed_size, n_layers).to(device)
     elif sentence_encoder_name == 'LSTM':
-        sen_encoder = models.LSTMEncoder(word_size, embed_size, n_layers).to(device)
+        sen_encoder = models.LSTMEncoder(vocab, word_size, embed_size, n_layers).to(device)
     else:
         raise ValueError
     # Load params
@@ -161,7 +165,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--config", type=str, required=True)
-    parser.add_argument("--word2vec", type=str, default=None)
+    parser.add_argument("--vocab", type=str, default=None)
     parser.add_argument("--img2vec", type=str, default=None)
     parser.add_argument("--val_json", type=str, default=None)
     parser.add_argument("--sentence_encoder", type=str, required=True)
