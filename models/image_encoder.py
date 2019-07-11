@@ -1,32 +1,23 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import init
-
-
-def init_weights(m):
-    if type(m) == nn.Linear:
-        init.kaiming_normal_(m.weight.data)
-        init.constant_(m.bias.data, val=0)
 
 
 class ImageEncoder(nn.Module):
 
-    def __init__(self, input_size, hidden_size, embed_size):
+    def __init__(self, d_input, d_hidden, d_model):
         super(ImageEncoder, self).__init__()
 
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.embed_size = embed_size
+        self.d_input = d_input
+        self.d_hidden = d_hidden
+        self.d_model = d_model
 
         self.encoder = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.BatchNorm1d(hidden_size),
+            nn.Linear(d_input, d_hidden),
+            nn.BatchNorm1d(d_hidden),
             nn.ReLU(),
-            nn.Linear(hidden_size, embed_size),
+            nn.Linear(d_hidden, d_model),
         )
-
-        self.encoder.apply(init_weights)
 
     def forward(self, x):
         return F.normalize(self.encoder(x))
