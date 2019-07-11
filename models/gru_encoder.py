@@ -4,14 +4,13 @@ import torch.nn.functional as F
 
 
 class GRUEncoder(nn.Module):
-    def __init__(self, vocab, input_size, hidden_size, n_layers, dropout=0.1):
+    def __init__(self, vocab, hidden_size, n_layers, dropout=0.1):
         super(GRUEncoder, self).__init__()
         self.n_layers = n_layers
-        self.input_size = input_size
         self.hidden_size = hidden_size
 
         self.embed = nn.Embedding.from_pretrained(vocab.vectors)
-        self.gru = nn.GRU(input_size, hidden_size, n_layers,
+        self.gru = nn.GRU(vocab.dim, hidden_size, n_layers,
                           dropout=(0 if n_layers == 1 else dropout), bidirectional=True)
         self.linear = nn.Linear(2 * n_layers * hidden_size, hidden_size)
 

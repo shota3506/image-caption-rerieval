@@ -1,7 +1,5 @@
 import argparse
 import os
-import time
-import spacy
 import configparser
 import pickle
 from tqdm import tqdm
@@ -18,6 +16,23 @@ from build_vocab import Vocab
 
 
 config = configparser.ConfigParser()
+
+
+def encode_image(image_encoder, images, device):
+    images = images.to(device)
+    return image_encoder(images)
+
+
+def encode_sentence(sentence_encoder, sentences, lengths, device):
+    sentences = sentences.to(device)
+    if isinstance(sentence_encoder, models.GRUEncoder) or isinstance(sentence_encoder, models.LSTMEncoder):
+        sentences_embedded = sentence_encoder(sentences, lengths)
+    elif isinstance(sentence_encoder, models.TransformerEncoder):
+        src_pos = models.get_src_pos(lengths).to(device)
+        sentences_embedded = sentence_encoder(sentences, src_pos)
+    else:
+        raise ValueError
+    return sentences_embedded
 
 
 class PairwiseRankingLoss(nn.Module):
@@ -58,17 +73,27 @@ def main(args):
     modelparams = config["modelparams"]
     sentence_encoder_name = modelparams.get("sentence_encoder")
     n_layers = modelparams.getint("n_layers")
-    word_size = modelparams.getint("word_size")
-    img_size = modelparams.getint("img_size")
-    img_hidden_size = modelparams.getint("img_hidden_size")
-    embed_size = modelparams.getint("embed_size")
+    n_head = modelparams.getint("n_head")
+    d_k = modelparams.getint("d_k")
+    d_v = modelparams.getint("d_v")
+    d_inner = modelparams.getint("d_inner")
+    d_img = modelparams.getint("d_img")
+    d_img_hidden = modelparams.getint("d_img_hidden")
+    d_model = modelparams.getint("d_model")
 
     print("[modelparames] sentence_encoder_name=%s" % sentence_encoder_name)
     print("[modelparames] n_layers=%d" % n_layers)
-    print("[modelparames] word_size=%d" % word_size)
-    print("[modelparames] img_size=%d" % img_size)
-    print("[modelparames] img_hidden_size=%d" % img_hidden_size)
-    print("[modelparames] embed_size=%d" % embed_size)
+    if n_head:
+        print("[modelparames] n_head=%d" % n_head)
+    if d_k:
+        print("[modelparames] d_k=%d" % d_k)
+    if d_v:
+        print("[modelparames] d_v=%d" % d_v)
+    if d_inner:
+        print("[modelparames] d_inner=%d" % d_inner)
+    print("[modelparames] d_img=%d" % d_img)
+    print("[modelparames] d_img_hidden=%d" % d_img_hidden)
+    print("[modelparames] d_model=%d" % d_model)
 
     # Hyper parameters
     hyperparams = config["hyperparams"]
@@ -95,11 +120,13 @@ def main(args):
     dataloader_train = datasets.coco.get_loader(img2vec_path, train_json_path, vocab, batch_size)
 
     # Model preparation
-    img_encoder = models.ImageEncoder(img_size, img_hidden_size, embed_size).to(device)
+    img_encoder = models.ImageEncoder(d_img, d_img_hidden, d_model).to(device)
     if sentence_encoder_name == 'GRU':
-        sen_encoder = models.GRUEncoder(vocab, word_size, embed_size, n_layers).to(device)
+        sen_encoder = models.GRUEncoder(vocab, d_model, n_layers).to(device)
     elif sentence_encoder_name == 'LSTM':
-        sen_encoder = models.LSTMEncoder(vocab, word_size, embed_size, n_layers).to(device)
+        sen_encoder = models.LSTMEncoder(vocab, d_model, n_layers).to(device)
+    elif sentence_encoder_name == 'Transformer':
+        sen_encoder = models.TransformerEncoder(vocab, n_layers, n_head, d_k, d_v, d_model, d_inner).to(device)
     else:
         raise ValueError
 
@@ -116,11 +143,8 @@ def main(args):
         for i, (imgs, sens, lengths, _, _) in enumerate(pbar):
             pbar.set_description('epoch %3d / %d' % (epoch + 1, n_epochs))
 
-            imgs = imgs.to(device)
-            img_embedded = img_encoder(imgs)
-
-            sens = sens.to(device)
-            sen_embedded = sen_encoder(sens, lengths)
+            img_embedded = encode_image(img_encoder, imgs, device)
+            sen_embedded = encode_sentence(sen_encoder, sens, lengths, device)
 
             img_optimizer.zero_grad()
             sen_optimizer.zero_grad()

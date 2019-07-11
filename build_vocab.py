@@ -10,13 +10,12 @@ class Vocab(object):
     """Simple vocabulary wrapper."""
     def __init__(self, pretrained):
         pretrained_vectors = torchtext.vocab.Vectors(pretrained)
-        dim = pretrained_vectors.dim
-
+        self.dim = pretrained_vectors.dim
         self.pad_token = '<pad>'
         self.unk_token = '<unk>'
         self.stoi = {self.pad_token: 0, self.unk_token: 1}
         self.itos = {0: self.pad_token, 1: self.unk_token}
-        self.vectors = torch.zeros(len(self.stoi), dim)
+        self.vectors = torch.zeros(len(self.stoi), self.dim)
         self.load_vectors(pretrained_vectors)
 
     def add_word(self, word):

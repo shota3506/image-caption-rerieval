@@ -39,16 +39,14 @@ def get_attn_key_pad_mask(seq_k, seq_q, pad_idx=0):
 
     return padding_mask
 
-#
-# def get_subsequent_mask(seq):
-#     ''' For masking out the subsequent info. '''
-#
-#     sz_b, len_s = seq.size()
-#     subsequent_mask = torch.triu(
-#         torch.ones((len_s, len_s), device=seq.device, dtype=torch.uint8), diagonal=1)
-#     subsequent_mask = subsequent_mask.unsqueeze(0).expand(sz_b, -1, -1)  # b x ls x ls
-#
-#     return subsequent_mask
+
+def get_src_pos(lengths):
+    src_pos = torch.zeros(len(lengths), max(lengths), dtype=torch.long)
+    for j, length in enumerate(lengths):
+        pos = torch.arange(1, length + 1)
+        src_pos[j, :length] = pos
+    src_pos = src_pos
+    return src_pos
 
 
 class ScaledDotProductAttention(nn.Module):
@@ -166,12 +164,12 @@ class TransformerEncoder(nn.Module):
         super(TransformerEncoder, self).__init__()
 
         n_position = len_max_seq + 1
-
         self.embed = nn.Embedding.from_pretrained(vocab.vectors, freeze=True)
         self.position_enc = nn.Embedding.from_pretrained(
             get_sinusoid_encoding_table(n_position, self.embed.embedding_dim),
             freeze=True)
 
+        self.linear = nn.Linear(2 * self.embed.embedding_dim, d_model)
         self.layer_stack = nn.ModuleList([
             TransformerEncoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
             for _ in range(n_layers)])
@@ -182,7 +180,8 @@ class TransformerEncoder(nn.Module):
         non_pad_mask = get_non_pad_mask(src_seq)
 
         # -- Forward
-        enc_output = self.embed(src_seq) + self.position_enc(src_pos)
+        enc_output = torch.cat((self.embed(src_seq), self.position_enc(src_pos)), dim=2)
+        enc_output = self.linear(enc_output)
 
         for enc_layer in self.layer_stack:
             enc_output, enc_slf_attn = enc_layer(
@@ -190,4 +189,6 @@ class TransformerEncoder(nn.Module):
                 non_pad_mask=non_pad_mask,
                 slf_attn_mask=slf_attn_mask)
 
-        return enc_output
+        enc_output = torch.sum(enc_output * non_pad_mask, dim=1) / torch.sum(non_pad_mask, dim=1)
+
+        return F.normalize(enc_output)

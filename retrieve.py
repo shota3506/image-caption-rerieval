@@ -1,6 +1,5 @@
 import numpy as np
 import argparse
-import spacy
 import configparser
 import pickle
 
@@ -10,15 +9,11 @@ import torchtext
 
 import datasets
 import models
+from train import encode_image, encode_sentence
 from build_vocab import Vocab
 
 
 config = configparser.ConfigParser()
-spacy_en = spacy.load('en')
-
-
-def tokenize(text):
-    return [tok.text for tok in spacy_en.tokenizer(text)]
 
 
 def encode_candidate(sen_encoder, img_encoder, dataloader, device):
@@ -29,11 +24,8 @@ def encode_candidate(sen_encoder, img_encoder, dataloader, device):
 
     with torch.no_grad():
         for imgs, sens, lengths, img_ids, ids in dataloader:
-            imgs = imgs.to(device)
-            img_embedded = img_encoder(imgs).to(torch.device("cpu"))
-            sens = torch.transpose(sens, 0, 1)
-            sens = sens.to(device)
-            sen_embedded = sen_encoder(sens, lengths).to(torch.device("cpu"))
+            img_embedded = encode_image(img_encoder, imgs, device).to(torch.device("cpu"))
+            sen_embedded = encode_sentence(sen_encoder, sens, lengths, device).to(torch.device("cpu"))
 
             i_list.append(img_embedded)
             s_list.append(sen_embedded)
@@ -91,18 +83,27 @@ def main(args):
     image_encoder_name = modelparams.get("image_encoder")
     sentence_encoder_name = modelparams.get("sentence_encoder")
     n_layers = modelparams.getint("n_layers")
-    word_size = modelparams.getint("word_size")
-    img_size = modelparams.getint("img_size")
-    img_hidden_size = modelparams.getint("img_hidden_size")
-    embed_size = modelparams.getint("embed_size")
+    n_head = modelparams.getint("n_head")
+    d_k = modelparams.getint("d_k")
+    d_v = modelparams.getint("d_v")
+    d_inner = modelparams.getint("d_inner")
+    d_img = modelparams.getint("d_img")
+    d_img_hidden = modelparams.getint("d_img_hidden")
+    d_model = modelparams.getint("d_model")
 
-    print("[modelparames] image_encoder_name=%s" % image_encoder_name)
     print("[modelparames] sentence_encoder_name=%s" % sentence_encoder_name)
     print("[modelparames] n_layers=%d" % n_layers)
-    print("[modelparames] word_size=%d" % word_size)
-    print("[modelparames] img_size=%d" % img_size)
-    print("[modelparames] img_hidden_size=%d" % img_hidden_size)
-    print("[modelparames] embed_size=%d" % embed_size)
+    if n_head:
+        print("[modelparames] n_head=%d" % n_head)
+    if d_k:
+        print("[modelparames] d_k=%d" % d_k)
+    if d_v:
+        print("[modelparames] d_v=%d" % d_v)
+    if d_inner:
+        print("[modelparames] d_inner=%d" % d_inner)
+    print("[modelparames] d_img=%d" % d_img)
+    print("[modelparames] d_img_hidden=%d" % d_img_hidden)
+    print("[modelparames] d_model=%d" % d_model)
 
     hyperparams = config["hyperparams"]
     batch_size = hyperparams.getint("batch_size")
@@ -116,13 +117,16 @@ def main(args):
     dataloader_val = datasets.coco.get_loader(img2vec_path, val_json_path, vocab, batch_size)
 
     # Model preparation
-    img_encoder = models.ImageEncoder(img_size, img_hidden_size, embed_size).to(device)
+    img_encoder = models.ImageEncoder(d_img, d_img_hidden, d_model).to(device)
     if sentence_encoder_name == 'GRU':
-        sen_encoder = models.GRUEncoder(vocab, word_size, embed_size, n_layers).to(device)
+        sen_encoder = models.GRUEncoder(vocab, d_model, n_layers).to(device)
     elif sentence_encoder_name == 'LSTM':
-        sen_encoder = models.LSTMEncoder(vocab, word_size, embed_size, n_layers).to(device)
+        sen_encoder = models.LSTMEncoder(vocab, d_model, n_layers).to(device)
+    elif sentence_encoder_name == 'Transformer':
+        sen_encoder = models.TransformerEncoder(vocab, n_layers, n_head, d_k, d_v, d_model, d_inner).to(device)
     else:
         raise ValueError
+
     # Load params
     img_encoder.load_state_dict(torch.load(image_encoder_path))
     sen_encoder.load_state_dict(torch.load(sentence_encoder_path))
