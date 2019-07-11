@@ -18,25 +18,6 @@ from build_vocab import Vocab
 config = configparser.ConfigParser()
 
 
-def encode_image(image_encoder, images, device):
-    images = images.to(device)
-    return image_encoder(images)
-
-
-def encode_sentence(sentence_encoder, sentences, lengths, device):
-    sentences = sentences.to(device)
-    if isinstance(sentence_encoder, models.GRUEncoder) or isinstance(sentence_encoder, models.LSTMEncoder):
-        sentences_embedded = sentence_encoder(sentences, lengths)
-    elif isinstance(sentence_encoder, models.TransformerEncoder):
-        src_pos = models.get_src_pos(lengths).to(device)
-        sentences_embedded = sentence_encoder(sentences, src_pos)
-    elif isinstance(sentence_encoder, models.MaxPoolingEncoder):
-        sentences_embedded = sentence_encoder(sentences)
-    else:
-        raise ValueError
-    return sentences_embedded
-
-
 class PairwiseRankingLoss(nn.Module):
     def __init__(self, margin):
         super(PairwiseRankingLoss, self).__init__()
@@ -124,16 +105,7 @@ def main(args):
 
     # Model preparation
     img_encoder = models.ImageEncoder(d_img, d_img_hidden, d_model).to(device)
-    if sentence_encoder_name == 'GRU':
-        sen_encoder = models.GRUEncoder(vocab, d_model, n_layers).to(device)
-    elif sentence_encoder_name == 'LSTM':
-        sen_encoder = models.LSTMEncoder(vocab, d_model, n_layers).to(device)
-    elif sentence_encoder_name == 'Transformer':
-        sen_encoder = models.TransformerEncoder(vocab, n_layers, n_head, d_k, d_v, d_model, d_inner).to(device)
-    elif sentence_encoder_name == 'MaxPooling':
-        sen_encoder = models.MaxPoolingEncoder(vocab, d_model).to(device)
-    else:
-        raise ValueError
+    sen_encoder = models.SentenceEncoder(vocab, sentence_encoder_name, d_model, n_layers, n_head, d_k, d_v, d_inner).to(device)
 
     img_optimizer = optim.Adam(img_encoder.parameters(), lr=lr, weight_decay=weight_decay)
     sen_optimizer = optim.Adam(sen_encoder.parameters(), lr=lr, weight_decay=weight_decay)
@@ -145,11 +117,14 @@ def main(args):
         running_loss = 0.0
 
         # Train
-        for i, (imgs, sens, lengths, _, _) in enumerate(pbar):
+        for i, (images, src_seq, src_pos, _, _) in enumerate(pbar):
             pbar.set_description('epoch %3d / %d' % (epoch + 1, n_epochs))
 
-            img_embedded = encode_image(img_encoder, imgs, device)
-            sen_embedded = encode_sentence(sen_encoder, sens, lengths, device)
+            images = images.to(device)
+            src_seq = src_seq.to(device)
+            src_pos = src_pos.to(device)
+            img_embedded = img_encoder(images)
+            sen_embedded = sen_encoder(src_seq, src_pos)
 
             img_optimizer.zero_grad()
             sen_optimizer.zero_grad()
@@ -168,7 +143,7 @@ def main(args):
             sen_optimizer.step()
 
             running_loss += loss.item()
-            if (i + 1) % 500 == 0:
+            if (i + 1) % 100 == 0:
                 pbar.set_postfix(loss=running_loss / 100)
                 running_loss = 0
 

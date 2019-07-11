@@ -40,15 +40,6 @@ def get_attn_key_pad_mask(seq_k, seq_q, pad_idx=0):
     return padding_mask
 
 
-def get_src_pos(lengths):
-    src_pos = torch.zeros(len(lengths), max(lengths), dtype=torch.long)
-    for j, length in enumerate(lengths):
-        pos = torch.arange(1, length + 1)
-        src_pos[j, :length] = pos
-    src_pos = src_pos
-    return src_pos
-
-
 class ScaledDotProductAttention(nn.Module):
     def __init__(self, temperature, attn_dropout=0.1):
         super().__init__()
@@ -160,27 +151,26 @@ class TransformerEncoderLayer(nn.Module):
 
 
 class TransformerEncoder(nn.Module):
-    def __init__(self, vocab, n_layers, n_head, d_k, d_v, d_model, d_inner, dropout=0.1, len_max_seq=100):
+    def __init__(self, d_word, d_model, n_layers, n_head, d_k, d_v, d_inner, dropout=0.1, len_max_seq=100):
         super(TransformerEncoder, self).__init__()
 
         n_position = len_max_seq + 1
-        self.embed = nn.Embedding.from_pretrained(vocab.vectors, freeze=True)
         self.position_enc = nn.Embedding.from_pretrained(
-            get_sinusoid_encoding_table(n_position, self.embed.embedding_dim),
+            get_sinusoid_encoding_table(n_position, d_word),
             freeze=True)
 
-        self.linear = nn.Linear(2 * self.embed.embedding_dim, d_model)
+        self.linear = nn.Linear(2 * d_word, d_model)
         self.layer_stack = nn.ModuleList([
             TransformerEncoderLayer(d_model, d_inner, n_head, d_k, d_v, dropout=dropout)
             for _ in range(n_layers)])
 
-    def forward(self, src_seq, src_pos):
+    def forward(self, enc_seq, src_pos):
         # -- Prepare masks
-        slf_attn_mask = get_attn_key_pad_mask(seq_k=src_seq, seq_q=src_seq)
-        non_pad_mask = get_non_pad_mask(src_seq)
+        slf_attn_mask = get_attn_key_pad_mask(seq_k=src_pos, seq_q=src_pos)
+        non_pad_mask = get_non_pad_mask(src_pos)
 
         # -- Forward
-        enc_output = torch.cat((self.embed(src_seq), self.position_enc(src_pos)), dim=2)
+        enc_output = torch.cat((enc_seq, self.position_enc(src_pos)), dim=2)
         enc_output = self.linear(enc_output)
 
         for enc_layer in self.layer_stack:

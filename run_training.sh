@@ -1,12 +1,12 @@
 #!/usr/bin/env sh
 
 GPU=0
-CONFIG=./config/trial1.ini
+CONFIG=./config/trial4.ini
 VOCAB=./vocab/glove.840B.300d.vocab.pkl
 IMG2VEC=./features/train2017.resnet50.2048d.pth
 TRAIN_JSON=$HOME/dataset/coco/annotations/captions_train2017.json
 SAVE=./save
-NAME=trial1
+NAME=trial4
 
 python train.py \
     --gpu ${GPU} \

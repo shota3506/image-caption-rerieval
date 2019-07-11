@@ -8,7 +8,6 @@ import torchtext
 
 import datasets
 import models
-from train import encode_image, encode_sentence
 from build_vocab import Vocab
 
 
@@ -22,9 +21,12 @@ def evaluate(sen_encoder, img_encoder, dataloader, device):
     i_ids = []
 
     with torch.no_grad():
-        for imgs, sens, lengths, img_ids, ids in dataloader:
-            img_embedded = encode_image(img_encoder, imgs, device).to(torch.device("cpu"))
-            sen_embedded = encode_sentence(sen_encoder, sens, lengths, device).to(torch.device("cpu"))
+        for images, src_seq, src_pos, img_ids, ids in dataloader:
+            images = images.to(device)
+            src_seq = src_seq.to(device)
+            src_pos = src_pos.to(device)
+            img_embedded = img_encoder(images).to(torch.device("cpu"))
+            sen_embedded = sen_encoder(src_seq, src_pos).to(torch.device("cpu"))
 
             i_list.append(img_embedded)
             s_list.append(sen_embedded)
@@ -161,16 +163,7 @@ def main(args):
 
     # Model preparation
     img_encoder = models.ImageEncoder(d_img, d_img_hidden, d_model).to(device)
-    if sentence_encoder_name == 'GRU':
-        sen_encoder = models.GRUEncoder(vocab, d_model, n_layers).to(device)
-    elif sentence_encoder_name == 'LSTM':
-        sen_encoder = models.LSTMEncoder(vocab, d_model, n_layers).to(device)
-    elif sentence_encoder_name == 'Transformer':
-        sen_encoder = models.TransformerEncoder(vocab, n_layers, n_head, d_k, d_v, d_model, d_inner).to(device)
-    elif sentence_encoder_name == 'MaxPooling':
-        sen_encoder = models.MaxPoolingEncoder(vocab, d_model).to(device)
-    else:
-        raise ValueError
+    sen_encoder = models.SentenceEncoder(vocab, sentence_encoder_name, d_model, n_layers, n_head, d_k, d_v, d_inner).to(device)
 
     # Load params
     img_encoder.load_state_dict(torch.load(image_encoder_path))

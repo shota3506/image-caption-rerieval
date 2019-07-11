@@ -78,7 +78,13 @@ def collate_fn(data):
     for i, cap in enumerate(captions):
         end = lengths[i]
         targets[i, :end] = cap[:end]
-    return images, targets, lengths, img_ids, ids
+
+    src_pos = torch.zeros(len(lengths), max(lengths), dtype=torch.long)
+    for i, length in enumerate(lengths):
+        pos = torch.arange(1, length + 1)
+        src_pos[i, :length] = pos
+    src_pos = src_pos
+    return images, targets, src_pos, img_ids, ids
 
 
 def get_loader(root, json, vocab, batch_size, shuffle=True, num_workers=1, transform=None, drop_last=True):
