@@ -143,11 +143,11 @@ def main(args):
             sen_optimizer.step()
 
             running_loss += loss.item()
-            if (i + 1) % 100 == 0:
-                pbar.set_postfix(loss=running_loss / 100)
+            if (i + 1) % args.print_every == 0:
+                pbar.set_postfix(loss=running_loss / args.print_every)
                 running_loss = 0
 
-        if (epoch + 1) % 1 == 0:
+        if (epoch + 1) % args.save_every == 0:
             save_dir = os.path.join(save_path, name)
             if not os.path.isdir(save_dir):
                 os.mkdir(save_dir)
@@ -166,6 +166,8 @@ if __name__ == "__main__":
     parser.add_argument("--train_json", type=str, default=None)
     parser.add_argument("--name", type=str, required=True)
     parser.add_argument("--save", type=str, required=True)
+    parser.add_argument("--print_every", type=int, default=300)
+    parser.add_argument("--save_every", type=int, default=1)
 
     args = parser.parse_args()
     main(args)
