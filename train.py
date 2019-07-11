@@ -30,6 +30,8 @@ def encode_sentence(sentence_encoder, sentences, lengths, device):
     elif isinstance(sentence_encoder, models.TransformerEncoder):
         src_pos = models.get_src_pos(lengths).to(device)
         sentences_embedded = sentence_encoder(sentences, src_pos)
+    elif isinstance(sentence_encoder, models.MaxPoolingEncoder):
+        sentences_embedded = sentence_encoder(sentences)
     else:
         raise ValueError
     return sentences_embedded
@@ -82,7 +84,8 @@ def main(args):
     d_model = modelparams.getint("d_model")
 
     print("[modelparames] sentence_encoder_name=%s" % sentence_encoder_name)
-    print("[modelparames] n_layers=%d" % n_layers)
+    if n_layers:
+        print("[modelparames] n_layers=%d" % n_layers)
     if n_head:
         print("[modelparames] n_head=%d" % n_head)
     if d_k:
@@ -127,6 +130,8 @@ def main(args):
         sen_encoder = models.LSTMEncoder(vocab, d_model, n_layers).to(device)
     elif sentence_encoder_name == 'Transformer':
         sen_encoder = models.TransformerEncoder(vocab, n_layers, n_head, d_k, d_v, d_model, d_inner).to(device)
+    elif sentence_encoder_name == 'MaxPooling':
+        sen_encoder = models.MaxPoolingEncoder(vocab, d_model).to(device)
     else:
         raise ValueError
 
@@ -163,7 +168,7 @@ def main(args):
             sen_optimizer.step()
 
             running_loss += loss.item()
-            if (i + 1) % 100 == 0:
+            if (i + 1) % 500 == 0:
                 pbar.set_postfix(loss=running_loss / 100)
                 running_loss = 0
 
