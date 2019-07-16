@@ -47,6 +47,7 @@ def main(args):
     print("[args] train_json_path=%s" % train_json_path)
     print("[args] name=%s" % name)
     print("[args] save_path=%s" % save_path)
+    print()
 
     device = torch.device("cuda:" + str(gpu) if torch.cuda.is_available() else "cpu")
 
@@ -78,6 +79,7 @@ def main(args):
     print("[modelparames] d_img=%d" % d_img)
     print("[modelparames] d_img_hidden=%d" % d_img_hidden)
     print("[modelparames] d_model=%d" % d_model)
+    print()
 
     # Hyper parameters
     hyperparams = config["hyperparams"]
@@ -96,6 +98,7 @@ def main(args):
     print("[hyperparames] batch_size=%d" % batch_size)
     print("[hyperparames] n_epochs=%d" % n_epochs)
     print("[hyperparames] n_negatives=%d" % n_negatives)
+    print()
 
     # Data preparation
     print("[info] Loading vocabulary ...")
@@ -112,11 +115,12 @@ def main(args):
 
     criterion = PairwiseRankingLoss(margin=margin)
 
+    # Train
+    print("[info] Training vocabulary ...")
     for epoch in range(n_epochs):
         pbar = tqdm(dataloader_train)
         running_loss = 0.0
 
-        # Train
         for i, (images, src_seq, src_pos, _, _) in enumerate(pbar):
             pbar.set_description('epoch %3d / %d' % (epoch + 1, n_epochs))
 
@@ -151,9 +155,13 @@ def main(args):
             save_dir = os.path.join(save_path, name)
             if not os.path.isdir(save_dir):
                 os.mkdir(save_dir)
-            torch.save(sen_encoder.state_dict(), os.path.join(
+
+            sen_dict = sen_encoder.state_dict()
+            sen_dict.pop('embed.weight')
+            img_dict = img_encoder.state_dict()
+            torch.save(sen_dict, os.path.join(
                 save_dir, 'sentence_encoder-{}.pth'.format(epoch + 1)))
-            torch.save(img_encoder.state_dict(), os.path.join(
+            torch.save(img_dict, os.path.join(
                 save_dir, 'image_encoder-{}.pth'.format(epoch + 1)))
 
 
@@ -167,7 +175,7 @@ if __name__ == "__main__":
     parser.add_argument("--name", type=str, required=True)
     parser.add_argument("--save", type=str, required=True)
     parser.add_argument("--print_every", type=int, default=300)
-    parser.add_argument("--save_every", type=int, default=1)
+    parser.add_argument("--save_every", type=int, default=5)
 
     args = parser.parse_args()
     main(args)

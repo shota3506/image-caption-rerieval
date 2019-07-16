@@ -34,25 +34,26 @@ def encode_candidate(sen_encoder, img_encoder, dataloader, device):
             i_ids.append(img_ids)
             s_ids.append(ids)
 
-    s_vectors = torch.cat(tuple(s_list)).numpy()
-    s_ids = torch.cat(tuple(s_ids)).numpy()
-    i_vectors = torch.cat(tuple(i_list)).numpy()
-    i_ids = torch.cat(tuple(i_ids)).numpy()
+    s_vectors = torch.cat(tuple(s_list))
+    s_ids = torch.cat(tuple(s_ids))
+    i_vectors = torch.cat(tuple(i_list))
+    i_ids = torch.cat(tuple(i_ids))
 
     used_ids = set()
     mask = []
     for i, id in enumerate(i_ids):
+        id = id.item()
         if id not in used_ids:
             used_ids.add(id)
             mask.append(True)
         else:
             mask.append(False)
-    mask = np.array(mask, dtype=bool)
+    mask = torch.tensor(mask)
 
     i_vectors = i_vectors[mask]
     i_ids = i_ids[mask]
 
-    return s_vectors, s_ids, i_vectors, i_ids
+    return s_vectors.numpy(), s_ids.numpy(), i_vectors.numpy(), i_ids.numpy()
 
 
 def main(args):
@@ -75,6 +76,7 @@ def main(args):
     print("[args] image_encoder_path=%s" % image_encoder_path)
     print("[args] name=%s" % name)
     print("[args] mode=%s" % mode)
+    print()
 
     device = torch.device("cuda:" + str(gpu) if torch.cuda.is_available() else "cpu")
 
@@ -106,11 +108,13 @@ def main(args):
     print("[modelparames] d_img=%d" % d_img)
     print("[modelparames] d_img_hidden=%d" % d_img_hidden)
     print("[modelparames] d_model=%d" % d_model)
+    print()
 
     hyperparams = config["hyperparams"]
     batch_size = hyperparams.getint("batch_size")
 
     print("[hyperparames] batch_size=%d" % batch_size)
+    print()
 
     # Data preparation
     print("[info] Loading vocabulary ...")
@@ -124,7 +128,7 @@ def main(args):
 
     # Load params
     img_encoder.load_state_dict(torch.load(image_encoder_path))
-    sen_encoder.load_state_dict(torch.load(sentence_encoder_path))
+    sen_encoder.load_state_dict(torch.load(sentence_encoder_path), strict=False)
     img_encoder.eval()
     sen_encoder.eval()
 
