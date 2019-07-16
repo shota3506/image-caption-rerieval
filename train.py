@@ -116,7 +116,7 @@ def main(args):
     criterion = PairwiseRankingLoss(margin=margin)
 
     # Train
-    print("[info] Training vocabulary ...")
+    print("[info] Training ...")
     for epoch in range(n_epochs):
         pbar = tqdm(dataloader_train)
         running_loss = 0.0
