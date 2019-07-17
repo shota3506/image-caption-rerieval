@@ -91,7 +91,6 @@ def main(args):
     d_v = modelparams.getint("d_v")
     d_inner = modelparams.getint("d_inner")
     d_img = modelparams.getint("d_img")
-    d_img_hidden = modelparams.getint("d_img_hidden")
     d_model = modelparams.getint("d_model")
 
     print("[modelparames] sentence_encoder_name=%s" % sentence_encoder_name)
@@ -106,7 +105,6 @@ def main(args):
     if d_inner:
         print("[modelparames] d_inner=%d" % d_inner)
     print("[modelparames] d_img=%d" % d_img)
-    print("[modelparames] d_img_hidden=%d" % d_img_hidden)
     print("[modelparames] d_model=%d" % d_model)
     print()
 
@@ -123,7 +121,7 @@ def main(args):
     dataloader_val = datasets.coco.get_loader(img2vec_path, val_json_path, vocab, batch_size)
 
     # Model preparation
-    img_encoder = models.ImageEncoder(d_img, d_img_hidden, d_model).to(device)
+    img_encoder = models.ImageEncoder(d_img, d_model).to(device)
     sen_encoder = models.SentenceEncoder(vocab, sentence_encoder_name, d_model, n_layers, n_head, d_k, d_v, d_inner).to(device)
 
     # Load params
